@@ -84,7 +84,18 @@ export async function GET() {
       ]
       
       // Format models for dashboard
-      const formattedModels = models.map((model: any) => {
+      interface ModelResponse {
+        id: string;
+        name?: string;
+        pricing?: {
+          prompt?: string;
+          completion?: string;
+        };
+        context_length?: number;
+        description?: string;
+      }
+
+      const formattedModels = models.map((model: ModelResponse) => {
         const modelId = model.id || ''
         
         // Determine category
@@ -111,7 +122,20 @@ export async function GET() {
       })
       
       // Sort by popularity and category
-      formattedModels.sort((a: any, b: any) => {
+      interface FormattedModel {
+        id: string;
+        name: string;
+        category: string;
+        pricing: {
+          prompt: string;
+          completion: string;
+        };
+        context_length: number;
+        is_popular: boolean;
+        description: string;
+      }
+
+      formattedModels.sort((a: FormattedModel, b: FormattedModel) => {
         if (a.is_popular && !b.is_popular) return -1
         if (!a.is_popular && b.is_popular) return 1
         if (a.category !== b.category) return a.category.localeCompare(b.category)

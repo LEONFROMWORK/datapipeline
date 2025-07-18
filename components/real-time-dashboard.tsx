@@ -17,13 +17,10 @@ import {
   Database, 
   Activity,
   Zap,
-  DollarSign,
   Terminal,
   CheckCircle,
   Clock,
   AlertCircle,
-  Wifi,
-  WifiOff,
   Settings
 } from "lucide-react";
 
@@ -41,7 +38,6 @@ export function RealTimeDashboard() {
   const [darkMode, setDarkMode] = useState(false);
   const [mounted, setMounted] = useState(false);
   // Remove isConnected - no backend to connect to
-  const [aiCosts, setAiCosts] = useState({ calls: 0, totalCost: 0 });
 
   const [dataSources, setDataSources] = useState<DataSource[]>([
     { id: "stackoverflow", name: "스택 오버플로우", enabled: true, status: "idle", collectedItems: 0, processedItems: 0 },
@@ -58,7 +54,28 @@ export function RealTimeDashboard() {
   const [viewMode, setViewMode] = useState<"reset" | "today" | "total">("total");
 
   // Local state for pipeline data (removed backend API dependencies)
-  const [pipelineStatus, setPipelineStatus] = useState<any>(null);
+  const [pipelineStatus, setPipelineStatus] = useState<{
+    pipeline_status: string;
+    cache_stats: {
+      total_entries: number;
+      estimated_size_bytes: number;
+    };
+    recent_datasets: Array<{
+      filename: string;
+      path: string;
+      size_bytes: number;
+      modified: string;
+      line_count: number;
+      metadata: Record<string, unknown>;
+    }>;
+    execution_info: {
+      current_stage: string;
+      collected_count: number;
+      processed_count: number;
+      quality_filtered_count: number;
+      final_count: number;
+    };
+  } | null>(null);
   const [realTimeLogs, setRealTimeLogs] = useState<string[]>([]);
   
   // Remove single execution timers - not needed anymore
@@ -170,28 +187,7 @@ export function RealTimeDashboard() {
         }
       } : prev);
     }
-  }, [isRunning]);
-
-  // Extract AI cost information from logs
-  useEffect(() => {
-    if (realTimeLogs) {
-      let totalCalls = 0;
-      let totalCost = 0;
-
-      realTimeLogs.forEach(log => {
-        if (log.includes("[AI]") && log.includes("Cost:")) {
-          // Extract cost from log: "[AI] Cost: $0.0034 (750 tokens)"
-          const costMatch = log.match(/\$(\d+\.\d+)/);
-          if (costMatch) {
-            totalCost += parseFloat(costMatch[1]);
-            totalCalls++;
-          }
-        }
-      });
-
-      setAiCosts({ calls: totalCalls, totalCost });
-    }
-  }, [realTimeLogs]);
+  }, [isRunning, dataSources]);
 
   // Reset all data function
   const resetAllData = () => {
@@ -203,7 +199,6 @@ export function RealTimeDashboard() {
     })));
     setRealTimeLogs([]);
     setPipelineStatus(null);
-    setAiCosts({ calls: 0, totalCost: 0 });
   };
 
   // Reset duplicate collection tracking database
@@ -251,7 +246,7 @@ export function RealTimeDashboard() {
       }, 3000); // Update every 3 seconds
       
       // Store interval ID for cleanup
-      (window as any).continuousCollectionInterval = interval;
+      (window as { continuousCollectionInterval?: NodeJS.Timeout }).continuousCollectionInterval = interval;
       
     } catch (error) {
       console.error("데이터 수집 시작 실패:", error);
@@ -264,9 +259,10 @@ export function RealTimeDashboard() {
       setIsRunning(false);
       
       // Clear data collection interval if running
-      if ((window as any).continuousCollectionInterval) {
-        clearInterval((window as any).continuousCollectionInterval);
-        (window as any).continuousCollectionInterval = null;
+      const windowWithInterval = window as { continuousCollectionInterval?: NodeJS.Timeout };
+      if (windowWithInterval.continuousCollectionInterval) {
+        clearInterval(windowWithInterval.continuousCollectionInterval);
+        windowWithInterval.continuousCollectionInterval = undefined;
       }
       
       // Immediately set all sources to idle status when manually stopped
@@ -305,7 +301,7 @@ export function RealTimeDashboard() {
           console.log('파일 저장 성공:', saveResult.file_info);
           
           // 저장된 파일 정보를 전역 변수에 저장 (pipeline status에서 사용)
-          (window as any).lastSavedFileInfo = saveResult.file_info;
+          (window as { lastSavedFileInfo?: unknown }).lastSavedFileInfo = saveResult.file_info;
           
           // Store to localStorage as backup
           const existingData = JSON.parse(localStorage.getItem('collectionHistory') || '[]');
@@ -354,7 +350,13 @@ export function RealTimeDashboard() {
       const totalProcessed = dataSources.reduce((sum, source) => sum + source.processedItems, 0);
       
       // Use saved file info if available, otherwise use default
-      const fileInfo = (window as any).lastSavedFileInfo || {
+      const fileInfo = (window as { lastSavedFileInfo?: {
+        filename: string;
+        path: string;
+        size_bytes: number;
+        line_count: number;
+        total_entries: number;
+      } }).lastSavedFileInfo || {
         filename: `collection_${new Date().toISOString().split('T')[0]}.jsonl`,
         path: `/Users/kevin/bigdata/output/collection_${new Date().toISOString().split('T')[0]}.jsonl`,
         size_bytes: totalCollected * 2048,
@@ -921,66 +923,21 @@ function getFilteredLogs(logs: string[], source: string): string[] {
   return logs.filter(log => log.toLowerCase().includes(source.toLowerCase()));
 }
 
-// Helper function to parse log entry for rich display
-function parseLogEntry(log: string, index: number) {
-  const timestamp = new Date(Date.now() - (15 - index) * 2000).toLocaleTimeString('ko-KR');
-  
-  let level = "INFO";
-  let levelBg = "bg-blue-600";
-  let source = "SYSTEM";
-  let sourceIcon = "•";
-  let sourceColor = "text-purple-400";
-  let message = log;
-  
-  // Determine log level
-  if (log.includes('ERROR') || log.includes('실패') || log.includes('Failed')) {
-    level = "ERROR";
-    levelBg = "bg-red-600";
-  } else if (log.includes('WARNING') || log.includes('경고') || log.includes('WARN')) {
-    level = "WARN";
-    levelBg = "bg-yellow-600";
-  } else if (log.includes('성공') || log.includes('SUCCESS') || log.includes('완료')) {
-    level = "SUCCESS";
-    levelBg = "bg-green-600";
-  } else if (log.includes('DEBUG')) {
-    level = "DEBUG";
-    levelBg = "bg-purple-600";
-  }
-  
-  // Determine source
-  if (log.toLowerCase().includes('stackoverflow') || log.includes('스택')) {
-    source = "STACKOVERFLOW";
-    sourceIcon = "•";
-    sourceColor = "text-orange-400";
-  } else if (log.toLowerCase().includes('reddit') || log.includes('레딧')) {
-    source = "REDDIT";
-    sourceIcon = "•";
-    sourceColor = "text-red-400";
-  } else if (log.toLowerCase().includes('oppadu') || log.includes('오빠두')) {
-    source = "OPPADU";
-    sourceIcon = "•";
-    sourceColor = "text-cyan-400";
-  }
-  
-  // Highlight important keywords
-  message = message
-    .replace(/(수집|처리|완료|성공|실패)/g, '<span class="bg-yellow-400 text-black px-1 rounded">$1</span>')
-    .replace(/(\d+개|\d+번|\$[\d.]+)/g, '<span class="bg-blue-400 text-white px-1 rounded">$1</span>');
-  
-  return {
-    timestamp,
-    source,
-    sourceIcon,
-    sourceColor,
-    level,
-    levelBg,
-    message
-  };
-}
 
 // Collection Stats Panel Component
 function CollectionStatsPanel() {
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<{
+    total_collected: number;
+    total_with_images: number;
+    sources: Record<string, {
+      total: number;
+      quality: { excellent: number; good: number; fair: number };
+      with_images: number;
+    }>;
+    weekly_trend: {
+      days: Array<{ date: string; count: number }>;
+    };
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   
   useEffect(() => {
@@ -1066,7 +1023,7 @@ function CollectionStatsPanel() {
           </CardContent>
         </Card>
         
-        {Object.entries(stats.sources).map(([source, data]: [string, any]) => {
+        {Object.entries(stats.sources).map(([source, data]) => {
           const sourceName = source === 'stackoverflow' ? 'Stack Overflow' : 
                            source === 'reddit' ? 'Reddit' : '오빠두';
           return (
@@ -1088,7 +1045,7 @@ function CollectionStatsPanel() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {Object.entries(stats.sources).map(([source, data]: [string, any]) => {
+            {Object.entries(stats.sources).map(([source, data]) => {
               const sourceName = source === 'stackoverflow' ? 'Stack Overflow' : 
                                source === 'reddit' ? 'Reddit' : '오빠두';
               const total = data.total;
@@ -1139,7 +1096,7 @@ function CollectionStatsPanel() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-7 gap-2">
-            {stats.weekly_trend.days.map((day: any) => (
+            {stats.weekly_trend.days.map((day) => (
               <div key={day.date} className="text-center p-3 bg-muted rounded-lg">
                 <div className="text-xs text-muted-foreground mb-1">
                   {new Date(day.date).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
@@ -1155,7 +1112,7 @@ function CollectionStatsPanel() {
 }
 
 // Helper function to get source-specific stats
-function getSourceStats(sourceId: string, viewMode: "reset" | "today" | "total" = "total", source?: any) {
+function getSourceStats(sourceId: string, viewMode: "reset" | "today" | "total" = "total", source?: DataSource) {
   // Use actual source data if available
   if (source) {
     const collected = source.collectedItems || 0;
@@ -1305,52 +1262,6 @@ function getSourceStats(sourceId: string, viewMode: "reset" | "today" | "total" 
     }
   };
 
-  // Use real-time data if source is provided, otherwise use static data
-  if (source) {
-    const collected = source.collectedItems || 0;
-    const processed = source.processedItems || 0;
-    
-    // Reset mode - return zeros
-    if (viewMode === "reset") {
-      return {
-        collected: 0,
-        processed: 0,
-        quality: {
-          excellent: 0,
-          good: 0,
-          fair: 0,
-          excellentPercent: 0,
-          goodPercent: 0,
-          fairPercent: 0
-        },
-        withImages: 0,
-        avgQuality: '0.0'
-      };
-    }
-    
-    // Today mode - show a portion of collected data
-    if (viewMode === "today") {
-      const todayCollected = Math.floor(collected * 0.15); // 15% of total as today's data
-      const todayProcessed = Math.floor(processed * 0.15);
-      
-      return {
-        collected: todayCollected,
-        processed: todayProcessed,
-        quality: calculateQualityStats(todayProcessed, sourceId),
-        withImages: Math.floor(todayCollected * 0.25),
-        avgQuality: getAvgQuality(sourceId)
-      };
-    }
-    
-    // Total mode - show actual collected data
-    return {
-      collected: collected,
-      processed: processed,
-      quality: calculateQualityStats(processed, sourceId),
-      withImages: Math.floor(collected * 0.25),
-      avgQuality: getAvgQuality(sourceId)
-    };
-  }
   
   // Fallback to static data when no source is provided
   let selectedData;
@@ -1431,25 +1342,3 @@ function getAvgQuality(sourceId: string): string {
   return avgQualities[sourceId as keyof typeof avgQualities] || '6.0';
 }
 
-// Helper function to highlight special parts of logs
-function highlightLog(log: string): JSX.Element {
-  if (log.includes("[AI]") || log.includes("OpenRouter")) {
-    return <span className="text-cyan-400">{log}</span>;
-  }
-  if (log.includes("Cost:") || log.includes("비용") || log.includes("$")) {
-    return <span className="text-yellow-400">{log}</span>;
-  }
-  if (log.includes("AI")) {
-    return <span className="text-blue-400">{log}</span>;
-  }
-  if (log.includes("완료") || log.includes("성공")) {
-    return <span className="text-green-400">{log}</span>;
-  }
-  if (log.includes("ERROR") || log.includes("오류") || log.includes("실패")) {
-    return <span className="text-red-400">{log}</span>;
-  }
-  if (log.includes("REDDIT") || log.includes("STACKOVERFLOW") || log.includes("레딧") || log.includes("스택")) {
-    return <span className="text-purple-400">{log}</span>;
-  }
-  return <span>{log}</span>;
-}

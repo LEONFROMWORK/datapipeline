@@ -98,12 +98,29 @@ export async function POST(request: Request) {
 }
 
 // 품질 통계 계산 함수
-function calculateQualityStats(sources: any[]) {
-  const qualityStats = {
+interface Source {
+  id: string;
+  processedItems?: number;
+}
+
+interface QualityStats {
+  total_excellent: number;
+  total_good: number;
+  total_fair: number;
+  by_source: Record<string, {
+    excellent: number;
+    good: number;
+    fair: number;
+    total: number;
+  }>;
+}
+
+function calculateQualityStats(sources: Source[]): QualityStats {
+  const qualityStats: QualityStats = {
     total_excellent: 0,
     total_good: 0,
     total_fair: 0,
-    by_source: {} as any
+    by_source: {}
   };
   
   sources.forEach(source => {

@@ -25,7 +25,7 @@ export interface PipelineStatusResponse {
     size_bytes: number;
     modified: string;
     line_count: number;
-    metadata: any;
+    metadata: Record<string, unknown>;
   }>;
   execution_info: {
     current_stage: string;
@@ -263,7 +263,7 @@ class PipelineAPI {
     }
   }
 
-  async startContinuousCollection(config: ContinuousConfig): Promise<any> {
+  async startContinuousCollection(config: ContinuousConfig): Promise<{ status: string; message: string }> {
     if (this.useMockAPI) {
       await this.delay(300);
       return {
@@ -318,8 +318,6 @@ export function usePipelineStatus(pollInterval = 5000) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    let intervalId: NodeJS.Timeout;
-
     const fetchStatus = async () => {
       try {
         const statusData = await pipelineAPI.getStatus();
@@ -333,7 +331,7 @@ export function usePipelineStatus(pollInterval = 5000) {
     };
 
     fetchStatus();
-    intervalId = setInterval(fetchStatus, pollInterval);
+    const intervalId = setInterval(fetchStatus, pollInterval);
 
     return () => {
       if (intervalId) {
@@ -351,8 +349,6 @@ export function usePipelineLogs(pollInterval = 3000) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let intervalId: NodeJS.Timeout;
-
     const fetchLogs = async () => {
       try {
         const logsData = await pipelineAPI.getLogs();
@@ -366,7 +362,7 @@ export function usePipelineLogs(pollInterval = 3000) {
     };
 
     fetchLogs();
-    intervalId = setInterval(fetchLogs, pollInterval);
+    const intervalId = setInterval(fetchLogs, pollInterval);
 
     return () => {
       if (intervalId) {

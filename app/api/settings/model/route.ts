@@ -33,7 +33,13 @@ function readSettings() {
 }
 
 // Write settings to file
-function writeSettings(settings: any) {
+interface Settings {
+  model: string;
+  updated_at: string;
+  [key: string]: unknown;
+}
+
+function writeSettings(settings: Settings) {
   ensureDataDirectory()
   
   try {

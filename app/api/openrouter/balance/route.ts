@@ -50,7 +50,7 @@ export async function GET() {
         keyData = await keyResponse.json();
         console.log('Key data:', keyData);
       }
-    } catch (keyError) {
+    } catch {
       console.log('Key endpoint failed, continuing with credits data only');
     }
 

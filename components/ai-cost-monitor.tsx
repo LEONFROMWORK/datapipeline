@@ -1,21 +1,19 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader2, DollarSign, TrendingUp, Activity, Settings, RefreshCw } from 'lucide-react'
+import { Loader2, DollarSign, TrendingUp, Activity, RefreshCw } from 'lucide-react'
 
 interface BalanceInfo {
   balance: number
   usage: number
   limit: number
   is_free_tier: boolean
-  rate_limit: Record<string, any>
+  rate_limit: Record<string, unknown>
   last_updated: string
 }
 
@@ -27,7 +25,7 @@ interface UsageStats {
   }
   total_cost: number
   total_requests: number
-  models_used: Record<string, any>
+  models_used: Record<string, unknown>
   daily_usage: Array<{
     date: string
     cost: number
@@ -59,15 +57,48 @@ export default function AICostMonitor() {
   const [models, setModels] = useState<ModelInfo[]>([])
   const [currentModel, setCurrentModel] = useState<string>("anthropic/claude-3.5-sonnet")
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
-  const [openRouterStatus, setOpenRouterStatus] = useState<any>(null)
-  const [realTimeUsage, setRealTimeUsage] = useState<any>(null)
-  const [liveUsageData, setLiveUsageData] = useState<any>(null)
-  const [usageHistory, setUsageHistory] = useState<any[]>([])
+  const [openRouterStatus, setOpenRouterStatus] = useState<{
+    status: string;
+    api_status: string;
+    available_models: number;
+    last_check: string;
+  } | null>(null)
+  const [realTimeUsage, setRealTimeUsage] = useState<{
+    total_cost: number;
+    total_requests: number;
+    monthly?: { total_cost: number };
+    models_used: Record<string, { cost: number; requests: number }>;
+    recent_activity: unknown[];
+  } | null>(null)
+  const [liveUsageData, setLiveUsageData] = useState<{
+    currentSession: {
+      totalCost: number;
+      totalRequests: number;
+      totalTokens: number;
+      inputTokens: number;
+      outputTokens: number;
+      activeModels: number;
+      primaryModel: string;
+      lastUsed: string;
+      requestsPerMinute: number;
+    };
+    modelUsage: Array<{
+      model: string;
+      cost: number;
+      requests: number;
+      inputTokens: number;
+      outputTokens: number;
+      lastUsed: string;
+      isActive: boolean;
+      efficiencyScore: number;
+      usageTrend: number[];
+    }>;
+    error?: string;
+  } | null>(null)
 
   // Fetch balance information
-  const fetchBalance = async () => {
+  const fetchBalance = useCallback(async () => {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
@@ -106,10 +137,10 @@ export default function AICostMonitor() {
         last_updated: new Date().toISOString()
       })
     }
-  }
+  }, [])
 
   // Fetch usage statistics
-  const fetchUsage = async (days: number = 7) => {
+  const fetchUsage = useCallback(async (days: number = 7) => {
     try {
       const response = await fetch(`/api/openrouter/usage?days=${days}`, {
         method: 'GET',
@@ -134,10 +165,10 @@ export default function AICostMonitor() {
       console.error('Failed to fetch usage statistics:', err)
       // Don't set error state for non-critical failures
     }
-  }
+  }, [])
 
   // Fetch available models
-  const fetchModels = async () => {
+  const fetchModels = useCallback(async () => {
     try {
       const response = await fetch('/api/openrouter/models')
       if (!response.ok) {
@@ -153,10 +184,10 @@ export default function AICostMonitor() {
       // Use empty array as fallback
       setModels([])
     }
-  }
+  }, [])
 
   // Fetch current model setting
-  const fetchCurrentModel = async () => {
+  const fetchCurrentModel = useCallback(async () => {
     try {
       const response = await fetch('/api/settings/model')
       if (!response.ok) {
@@ -172,33 +203,11 @@ export default function AICostMonitor() {
       // Use default model if fetch fails
       setCurrentModel('anthropic/claude-3.5-sonnet')
     }
-  }
+  }, [])
 
-  // Update model setting
-  const updateModel = async (modelId: string) => {
-    try {
-      const response = await fetch('/api/settings/model', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ model: modelId }),
-      })
-      
-      if (response.ok) {
-        setCurrentModel(modelId)
-      } else {
-        console.error('Failed to update model - server error')
-        setCurrentModel(modelId) // Still update UI even if server fails
-      }
-    } catch (err) {
-      console.error('Failed to update model:', err)
-      setCurrentModel(modelId) // Still update UI even if request fails
-    }
-  }
 
   // Fetch OpenRouter status
-  const fetchOpenRouterStatus = async () => {
+  const fetchOpenRouterStatus = useCallback(async () => {
     try {
       // Mock data for now - replace with actual API call
       const mockStatus = {
@@ -211,10 +220,10 @@ export default function AICostMonitor() {
     } catch (err) {
       console.error('Failed to fetch OpenRouter status:', err);
     }
-  };
+  }, []);
 
   // Fetch live usage data from OpenRouter API
-  const fetchLiveUsageData = async () => {
+  const fetchLiveUsageData = useCallback(async () => {
     try {
       const response = await fetch('/api/openrouter/usage', {
         method: 'GET',
@@ -263,14 +272,19 @@ export default function AICostMonitor() {
           lastUsed: data.lastUpdated ? new Date(data.lastUpdated).toLocaleTimeString('ko-KR') : '-',
           requestsPerMinute: calculateRequestsPerMinute(data.currentSession?.totalRequests || 0)
         },
-        modelUsage: (data.modelUsage || []).map((model: any) => ({
+        modelUsage: (data.modelUsage || []).map((model: {
+          model: string;
+          cost?: number;
+          requests?: number;
+          efficiencyScore?: number;
+        }) => ({
           model: model.model,
           cost: model.cost || 0,
           requests: model.requests || 0,
-          inputTokens: Math.floor((model.cost / 0.000001) * 0.6) || 0, // Estimate based on cost
-          outputTokens: Math.floor((model.cost / 0.000001) * 0.4) || 0, // Estimate based on cost
+          inputTokens: Math.floor(((model.cost || 0) / 0.000001) * 0.6) || 0, // Estimate based on cost
+          outputTokens: Math.floor(((model.cost || 0) / 0.000001) * 0.4) || 0, // Estimate based on cost
           lastUsed: new Date().toLocaleTimeString('ko-KR'),
-          isActive: model.requests > 0,
+          isActive: (model.requests || 0) > 0,
           efficiencyScore: model.efficiencyScore || 0,
           usageTrend: generateUsageTrend(model.requests || 0)
         }))
@@ -296,7 +310,7 @@ export default function AICostMonitor() {
         error: 'OpenRouter API 연결 실패'
       });
     }
-  };
+  }, []);
 
   // Helper function to calculate requests per minute
   const calculateRequestsPerMinute = (totalRequests: number): number => {
@@ -316,7 +330,7 @@ export default function AICostMonitor() {
   };
 
   // Fetch real-time usage from actual API
-  const fetchRealTimeUsage = async () => {
+  const fetchRealTimeUsage = useCallback(async () => {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
@@ -359,10 +373,10 @@ export default function AICostMonitor() {
         recent_activity: []
       });
     }
-  };
+  }, []);
 
   // Refresh all data
-  const refreshData = async () => {
+  const refreshData = useCallback(async () => {
     setRefreshing(true)
     await Promise.all([
       fetchBalance(), // Re-enabled for real-time balance updates
@@ -374,7 +388,7 @@ export default function AICostMonitor() {
       fetchLiveUsageData()
     ])
     setRefreshing(false)
-  }
+  }, [fetchBalance, fetchUsage, fetchModels, fetchCurrentModel, fetchOpenRouterStatus, fetchRealTimeUsage, fetchLiveUsageData])
 
   useEffect(() => {
     const loadData = async () => {
@@ -401,7 +415,7 @@ export default function AICostMonitor() {
     }, 5000); // Update every 5 seconds for live data (reduced frequency to avoid overwhelming)
     
     return () => clearInterval(interval);
-  }, [])
+  }, [fetchBalance, fetchRealTimeUsage, fetchOpenRouterStatus, fetchLiveUsageData, refreshData])
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -411,10 +425,6 @@ export default function AICostMonitor() {
     }).format(amount)
   }
 
-  const getUsagePercentage = () => {
-    if (!balance || balance.limit === 0) return 0
-    return (balance.usage / balance.limit) * 100
-  }
 
   const getModelsByCategory = () => {
     const categories: Record<string, ModelInfo[]> = {}
@@ -455,11 +465,6 @@ export default function AICostMonitor() {
         </Button>
       </div>
 
-      {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
 
       {/* OpenRouter Connection Status */}
       <Card className="mb-4">
@@ -561,7 +566,7 @@ export default function AICostMonitor() {
                 </Badge>
               </div>
               <div className="space-y-3">
-                {(liveUsageData?.modelUsage || []).map((model: any, index: number) => {
+                {(liveUsageData?.modelUsage || []).map((model, index: number) => {
                   const tier = model.model.includes('mistral-7b') || model.model.includes('llama-3.2-3b') ? 'Tier 1' :
                               model.model.includes('mistral-small') || model.model.includes('llama-3.1-8b') ? 'Tier 2' :
                               'Tier 3';
@@ -622,11 +627,11 @@ export default function AICostMonitor() {
                           <div className="space-y-2">
                             <div className="flex justify-between text-xs">
                               <span>요청당 비용:</span>
-                              <span className="font-mono">${(model.cost / model.requests || 0).toFixed(6)}</span>
+                              <span className="font-mono">${((model.cost || 0) / (model.requests || 1)).toFixed(6)}</span>
                             </div>
                             <div className="flex justify-between text-xs">
                               <span>토큰당 비용:</span>
-                              <span className="font-mono">${(model.cost / (model.inputTokens + model.outputTokens) || 0).toFixed(8)}</span>
+                              <span className="font-mono">${((model.cost || 0) / ((model.inputTokens + model.outputTokens) || 1)).toFixed(8)}</span>
                             </div>
                             <div className="flex justify-between text-xs">
                               <span>효율성 점수:</span>
