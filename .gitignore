@@ -39,3 +39,25 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# data files
+/data/*.json
+/data/*.jsonl
+
+# output files
+/output/
+/tmp/
+
+# documentation (제외)
+README.md
+*.md
+!render.yaml
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+Thumbs.db
