@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import AICostMonitor from "./ai-cost-monitor";
+import { UserNav } from "@/components/ui/user-nav";
 import { 
   Play, 
   Square, 
@@ -490,6 +491,7 @@ export function RealTimeDashboard() {
               >
                 {mounted && darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </Button>
+              <UserNav />
             </div>
           </div>
         </div>
