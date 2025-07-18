@@ -33,6 +33,9 @@ export interface PipelineStatusResponse {
     processed_count: number;
     quality_filtered_count: number;
     final_count: number;
+    elapsed_time: number;
+    last_execution: string;
+    next_scheduled: string | null;
     errors: string[];
   } | null;
   timestamp: string;
@@ -90,8 +93,10 @@ class PipelineAPI {
         final_count: 0,
         elapsed_time: 0,
         last_execution: new Date(now.getTime() - 3600000).toISOString(),
-        next_scheduled: null
-      }
+        next_scheduled: null,
+        errors: []
+      },
+      timestamp: new Date().toISOString()
     };
   }
 
